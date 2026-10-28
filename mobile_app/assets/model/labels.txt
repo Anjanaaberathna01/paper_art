@@ -1,0 +1,8 @@
+Ruler
+glue
+scissor
+pen
+plastic
+Cardboard
+paper
+pencil
