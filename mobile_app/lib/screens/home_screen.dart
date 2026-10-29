@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -155,7 +156,7 @@ class _Header extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.22),
+                        color: Colors.white.withValues(alpha: 0.22),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.notifications_rounded,
@@ -199,14 +200,14 @@ class _Header extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity),
+          color: Colors.white.withValues(alpha: opacity),
         ),
       );
 
   static Widget _statChip(IconData icon, String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.22),
+          color: Colors.white.withValues(alpha: 0.22),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -261,12 +262,12 @@ class _CategorySection extends StatelessWidget {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [accent, accent.withOpacity(0.7)],
+                      colors: [accent, accent.withValues(alpha: 0.7)],
                     ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: accent.withOpacity(0.4),
+                        color: accent.withValues(alpha: 0.4),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -290,7 +291,7 @@ class _CategorySection extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.15),
+                    color: accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
@@ -367,9 +368,24 @@ class _CraftCardState extends State<_CraftCard> {
           onTapDown: (_) => setState(() => _pressed = true),
           onTapCancel: () => setState(() => _pressed = false),
           onTapUp: (_) {
-            setState(() => _pressed = false);
-            debugPrint('Clicked on: ${widget.craft['title']}');
-          },
+                        setState(() => _pressed = false);
+                        Navigator.of(context).push(
+                        PageRouteBuilder(
+                          transitionDuration: const Duration(milliseconds: 500),
+                          pageBuilder: (_, __, ___) => DetailScreen(craft: widget.craft),
+                          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+                            opacity: anim,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.08),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+                              child: child,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
           child: Container(
             width: 190,
             margin: const EdgeInsets.only(right: 16, top: 4, bottom: 16),
@@ -378,7 +394,7 @@ class _CraftCardState extends State<_CraftCard> {
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
-                  color: accent.withOpacity(0.30),
+                  color: accent.withValues(alpha: 0.30),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -395,8 +411,8 @@ class _CraftCardState extends State<_CraftCard> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          accent.withOpacity(0.28),
-                          accent.withOpacity(0.06),
+                          accent.withValues(alpha: 0.28),
+                          accent.withValues(alpha: 0.06),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(22),
@@ -410,7 +426,7 @@ class _CraftCardState extends State<_CraftCard> {
                             widget.craft['imagePath'] ??
                                 'assets/images/placeholder.jpg',
                             fit: BoxFit.contain, // crop nowe
-                            errorBuilder: (_, __, ___) => Center(
+                            errorBuilder: (_, _, _) => Center(
                               child: Icon(Icons.broken_image_rounded,
                                   size: 44, color: accent),
                             ),
@@ -425,7 +441,7 @@ class _CraftCardState extends State<_CraftCard> {
                                 duration: const Duration(milliseconds: 250),
                                 padding: const EdgeInsets.all(7),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.92),
+                                  color: Colors.white.withValues(alpha: 0.92),
                                   shape: BoxShape.circle,
                                 ),
                                 child: AnimatedSwitcher(
@@ -476,12 +492,12 @@ class _CraftCardState extends State<_CraftCard> {
                         padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [accent, accent.withOpacity(0.75)],
+                            colors: [accent, accent.withValues(alpha: 0.75)],
                           ),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: accent.withOpacity(0.45),
+                              color: accent.withValues(alpha: 0.45),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),
@@ -542,7 +558,7 @@ class _PulsingScanButtonState extends State<_PulsingScanButton>
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2ECC71).withOpacity(0.5),
+              color: const Color(0xFF2ECC71).withValues(alpha: 0.5),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),

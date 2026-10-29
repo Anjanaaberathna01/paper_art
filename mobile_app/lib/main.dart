@@ -22,7 +22,6 @@ class CraftApp extends StatelessWidget {
       title: 'Kids Hand Craft App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        fontFamily: 'Poppins',
         colorSchemeSeed: const Color(0xFF2ECC71),
         useMaterial3: true,
       ),
