@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/home_screen.dart'; // HomeScreen file එක import කරගන්න
+import 'screens/Splash_Screen.dart';
 
 void main() async {
-  // Flutter bindings initialize karanna
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase connect karanna
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -24,10 +22,11 @@ class CraftApp extends StatelessWidget {
       title: 'Kids Hand Craft App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.green,
+        fontFamily: 'Poppins',
+        colorSchemeSeed: const Color(0xFF2ECC71),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: SplashScreen(),
     );
   }
 }
