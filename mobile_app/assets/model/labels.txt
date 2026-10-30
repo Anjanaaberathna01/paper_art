@@ -1,8 +1,12 @@
 Ruler
 glue
 scissor
-pen
 plastic
 Cardboard
 paper
 pencil
+paper cup
+straw
+pen
+yarn cone
+wool

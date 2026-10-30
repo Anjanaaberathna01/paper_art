@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'detail_screen.dart';
+import '../services/detect_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -15,7 +16,6 @@ class HomeScreen extends StatelessWidget {
     Color(0xFF29B6F6),
   ];
 
-  // Category name ekata anuwa icon ekak
   static IconData _iconFor(String category) {
     final c = category.toLowerCase();
     if (c.contains('paper')) return Icons.description_rounded;
@@ -45,22 +45,26 @@ class HomeScreen extends StatelessWidget {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.sentiment_dissatisfied_rounded,
-                      size: 64, color: Colors.grey),
+                children: [
+                  Icon(
+                    Icons.sentiment_dissatisfied_rounded,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
                   SizedBox(height: 12),
-                  Text('No crafts found in database!',
-                      style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  Text(
+                    'No crafts found in database!',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
                 ],
               ),
             );
           }
 
-          final Map<String, List<Map<String, dynamic>>> categorized = {};
-          for (var doc in snapshot.data!.docs) {
+final Map<String, List<Map<String, dynamic>>> categorized = {};          for (var doc in snapshot.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final category = data['category'] ?? 'Other Crafts';
             categorized.putIfAbsent(category, () => []).add(data);
@@ -73,22 +77,21 @@ class HomeScreen extends StatelessWidget {
             slivers: [
               SliverToBoxAdapter(
                 child: _Header(
-                    totalCrafts: totalCrafts, totalCategories: entries.length),
+                  totalCrafts: totalCrafts,
+                  totalCategories: entries.length,
+                ),
               ),
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final accent = _accents[i % _accents.length];
-                    return _CategorySection(
-                      name: entries[i].key,
-                      crafts: entries[i].value,
-                      accent: accent,
-                      icon: _iconFor(entries[i].key),
-                      index: i,
-                    );
-                  },
-                  childCount: entries.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  final accent = _accents[i % _accents.length];
+                  return _CategorySection(
+                    name: entries[i].key,
+                    crafts: entries[i].value,
+                    accent: accent,
+                    icon: _iconFor(entries[i].key),
+                    index: i,
+                  );
+                }, childCount: entries.length),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
@@ -114,7 +117,10 @@ class _Header extends StatelessWidget {
       curve: Curves.easeOutCubic,
       builder: (context, v, child) => Opacity(
         opacity: v,
-        child: Transform.translate(offset: Offset(0, -30 * (1 - v)), child: child),
+        child: Transform.translate(
+          offset: Offset(0, -30 * (1 - v)),
+          child: child,
+        ),
       ),
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 64, 24, 28),
@@ -131,27 +137,23 @@ class _Header extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // decoration bubbles
-            Positioned(
-              right: -20,
-              top: -30,
-              child: _bubble(110, 0.12),
-            ),
-            Positioned(
-              right: 60,
-              bottom: -20,
-              child: _bubble(60, 0.15),
-            ),
+            Positioned(right: -20, top: -30, child: _bubble(110, 0.12)),
+            Positioned(right: 60, bottom: -20, child: _bubble(60, 0.15)),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.waving_hand_rounded,
-                        color: Color(0xFFFFEB3B), size: 20),
+                    const Icon(
+                      Icons.waving_hand_rounded,
+                      color: Color(0xFFFFEB3B),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
-                    const Text('Hello, little artist!',
-                        style: TextStyle(color: Colors.white70, fontSize: 15)),
+                    const Text(
+                      'Hello, little artist!',
+                      style: TextStyle(color: Colors.white70, fontSize: 15),
+                    ),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -159,32 +161,46 @@ class _Header extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.22),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.notifications_rounded,
-                          color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.notifications_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     Icon(Icons.palette_rounded, color: Colors.white, size: 34),
                     SizedBox(width: 10),
-                    Text('Kids Hand Craft',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900)),
+                    Text(
+                      'Kids Hand Craft',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text('What shall we make today?',
-                    style: TextStyle(color: Colors.white, fontSize: 15)),
+                const Text(
+                  'What shall we make today?',
+                  style: TextStyle(color: Colors.white, fontSize: 15),
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    _statChip(Icons.category_rounded, '$totalCategories Categories'),
+                    _statChip(
+                      Icons.category_rounded,
+                      '$totalCategories Categories',
+                    ),
                     const SizedBox(width: 10),
-                    _statChip(Icons.auto_awesome_rounded, '$totalCrafts Crafts'),
+                    _statChip(
+                      Icons.auto_awesome_rounded,
+                      '$totalCrafts Crafts',
+                    ),
                   ],
                 ),
               ],
@@ -215,11 +231,14 @@ class _Header extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 16),
             const SizedBox(width: 6),
-            Text(text,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
+            Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       );
@@ -249,7 +268,10 @@ class _CategorySection extends StatelessWidget {
       curve: Curves.easeOut,
       builder: (context, v, child) => Opacity(
         opacity: v,
-        child: Transform.translate(offset: Offset(0, 30 * (1 - v)), child: child),
+        child: Transform.translate(
+          offset: Offset(0, 30 * (1 - v)),
+          child: child,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,7 +302,6 @@ class _CategorySection extends StatelessWidget {
                   child: Text(
                     name,
                     style: const TextStyle(
-                      fontFamily: 'titillium',
                       fontSize: 21,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF2D3436),
@@ -288,8 +309,10 @@ class _CategorySection extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
@@ -299,9 +322,13 @@ class _CategorySection extends StatelessWidget {
                     children: [
                       Icon(Icons.swipe_rounded, size: 14, color: accent),
                       const SizedBox(width: 4),
-                      Text('${crafts.length}',
-                          style: TextStyle(
-                              color: accent, fontWeight: FontWeight.bold)),
+                      Text(
+                        '${crafts.length}',
+                        style: TextStyle(
+                          color: accent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -309,17 +336,14 @@ class _CategorySection extends StatelessWidget {
             ),
           ),
           SizedBox(
-            height: 380, // 9:16 pinthoora walata
+            height: 380,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: crafts.length,
-              itemBuilder: (context, i) => _CraftCard(
-                craft: crafts[i],
-                accent: accent,
-                index: i,
-              ),
+              itemBuilder: (context, i) =>
+                  _CraftCard(craft: crafts[i], accent: accent, index: i),
             ),
           ),
         ],
@@ -352,14 +376,16 @@ class _CraftCardState extends State<_CraftCard> {
   Widget build(BuildContext context) {
     final accent = widget.accent;
 
-    // Staggered entrance animation (right idan slide wela enawa)
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 500 + widget.index * 120),
       curve: Curves.easeOutBack,
       builder: (context, v, child) => Opacity(
         opacity: v.clamp(0.0, 1.0),
-        child: Transform.translate(offset: Offset(60 * (1 - v), 0), child: child),
+        child: Transform.translate(
+          offset: Offset(60 * (1 - v), 0),
+          child: child,
+        ),
       ),
       child: AnimatedScale(
         scale: _pressed ? 0.95 : 1.0,
@@ -368,24 +394,26 @@ class _CraftCardState extends State<_CraftCard> {
           onTapDown: (_) => setState(() => _pressed = true),
           onTapCancel: () => setState(() => _pressed = false),
           onTapUp: (_) {
-                        setState(() => _pressed = false);
-                        Navigator.of(context).push(
-                        PageRouteBuilder(
-                          transitionDuration: const Duration(milliseconds: 500),
-                          pageBuilder: (_, __, ___) => DetailScreen(craft: widget.craft),
-                          transitionsBuilder: (_, anim, __, child) => FadeTransition(
-                            opacity: anim,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.08),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-                              child: child,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+            setState(() => _pressed = false);
+            Navigator.of(context).push(
+              PageRouteBuilder(
+                transitionDuration: const Duration(milliseconds: 500),
+                pageBuilder: (_, _, _) => DetailScreen(craft: widget.craft),
+                transitionsBuilder: (_, anim, _, child) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.08),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(parent: anim, curve: Curves.easeOut),
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            );
+          },
           child: Container(
             width: 190,
             margin: const EdgeInsets.only(right: 16, top: 4, bottom: 16),
@@ -402,7 +430,6 @@ class _CraftCardState extends State<_CraftCard> {
             ),
             child: Column(
               children: [
-                // ---------- Image ----------
                 Expanded(
                   child: Container(
                     margin: const EdgeInsets.all(10),
@@ -425,13 +452,15 @@ class _CraftCardState extends State<_CraftCard> {
                           Image.asset(
                             widget.craft['imagePath'] ??
                                 'assets/images/placeholder.jpg',
-                            fit: BoxFit.contain, // crop nowe
+                            fit: BoxFit.contain,
                             errorBuilder: (_, _, _) => Center(
-                              child: Icon(Icons.broken_image_rounded,
-                                  size: 44, color: accent),
+                              child: Icon(
+                                Icons.broken_image_rounded,
+                                size: 44,
+                                color: accent,
+                              ),
                             ),
                           ),
-                          // Heart button
                           Positioned(
                             top: 8,
                             right: 8,
@@ -467,8 +496,6 @@ class _CraftCardState extends State<_CraftCard> {
                     ),
                   ),
                 ),
-
-                // ---------- Title ----------
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 10, 16),
                   child: Row(
@@ -479,7 +506,6 @@ class _CraftCardState extends State<_CraftCard> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontFamily: 'Poppins',
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
                             height: 1.2,
@@ -503,8 +529,11 @@ class _CraftCardState extends State<_CraftCard> {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.play_arrow_rounded,
-                            color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ],
                   ),
@@ -549,10 +578,8 @@ class _PulsingScanButtonState extends State<_PulsingScanButton>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _c,
-      builder: (context, child) => Transform.scale(
-        scale: 1.0 + 0.05 * _c.value,
-        child: child,
-      ),
+      builder: (context, child) =>
+          Transform.scale(scale: 1.0 + 0.05 * _c.value, child: child),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(30),
@@ -565,13 +592,19 @@ class _PulsingScanButtonState extends State<_PulsingScanButton>
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () => debugPrint('Camera Scanner Clicked!'),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const DetectScreen()),
+            );
+          },
           backgroundColor: const Color(0xFF2ECC71),
           elevation: 0,
           icon: const Icon(Icons.camera_alt_rounded, color: Colors.white),
-          label: const Text('Scan & Find',
-              style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold)),
+          label: const Text(
+            'Scan & Find',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );
