@@ -1,12 +1,12 @@
+Cardboard
 Ruler
 glue
-scissor
-plastic
-Cardboard
 paper
-pencil
 paper cup
-straw
 pen
-yarn cone
+pencil
+plastic
+scissor
+straw
 wool
+yarn cone

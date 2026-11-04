@@ -293,7 +293,7 @@ class _DetailScreenState extends State<DetailScreen> {
               ValueListenableBuilder<double>(
                 valueListenable: _offset,
                 builder: (context, offset, _) {
-                  final t = (offset / _dockEnd).clamp(0.0, 1.0);
+                  final double t = (offset / _dockEnd).clamp(0.0, 1.0). toDouble();
                   final hidden = _miniClosed && t >= 1;
 
                   final left = _lerp(16, miniLeft, t);
@@ -334,7 +334,7 @@ class _DetailScreenState extends State<DetailScreen> {
               ValueListenableBuilder<double>(
                 valueListenable: _offset,
                 builder: (context, offset, _) {
-                  final t = (offset / _dockEnd).clamp(0.0, 1.0);
+                  final double t = (offset / _dockEnd).clamp(0.0, 1.0). toDouble();
                   if (t < 0.98 || _miniClosed) return const SizedBox.shrink();
 
                   return Positioned(
@@ -656,7 +656,7 @@ class _FadeSlide extends StatelessWidget {
       duration: Duration(milliseconds: 500 + delay),
       curve: Curves.easeOutCubic,
       builder: (context, v, child) => Opacity(
-        opacity: v.clamp(0.0, 1.0),
+        opacity: v.clamp(0.0, 1.0). toDouble(),
         child: Transform.translate(
           offset: Offset(0, 30 * (1 - v)),
           child: child,

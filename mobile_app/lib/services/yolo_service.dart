@@ -1,3 +1,4 @@
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_litert/flutter_litert.dart';
@@ -13,7 +14,10 @@ class YoloService {
   static const int numClasses = 12;
   static const int numDetections = 8400;
 
-  static const double confidenceThreshold = 0.25;
+  static const int paperClassId = 3;
+  static const int paperOutputIndex = paperClassId + 4;
+
+  static const double confidenceThreshold = 0.10;
   static const double iouThreshold = 0.45;
 
   static Future<void> loadModel() async {
@@ -31,6 +35,8 @@ class YoloService {
 
   static Future<void> _initializeModel() async {
     try {
+      debugPrint('YOLO model initialization started.');
+
       if (kIsWeb) {
         await initializeWeb();
       }
@@ -46,6 +52,30 @@ class YoloService {
       _interpreter = await Interpreter.fromAsset(
         'assets/model/yolo_model.tflite',
       );
+
+      final inputTensors = _interpreter!.getInputTensors();
+
+      for (int i = 0; i < inputTensors.length; i++) {
+        debugPrint(
+          'INPUT $i: Shape = ${inputTensors[i].shape}, '
+          'Type = ${inputTensors[i].type}',
+        );
+      }
+
+      final outputTensors = _interpreter!.getOutputTensors();
+
+      for (int i = 0; i < outputTensors.length; i++) {
+        debugPrint(
+          'OUTPUT $i: Shape = ${outputTensors[i].shape}, '
+          'Type = ${outputTensors[i].type}',
+        );
+      }
+
+      if (_labels.length != numClasses) {
+        throw Exception(
+          'Expected $numClasses labels, found ${_labels.length}.',
+        );
+      }
 
       debugPrint('YOLO model loaded successfully.');
       debugPrint('Labels: ${_labels.length}');
@@ -142,19 +172,76 @@ class YoloService {
 
       _interpreter!.run(input, output);
 
+      // ========== CLASS DEBUG ==========
+      for (final classInfo in [
+        {'name': 'Cardboard', 'id': 0},
+        {'name': 'Paper', 'id': 3},
+      ]) {
+        final String name = classInfo['name'] as String;
+        final int classId = classInfo['id'] as int;
+
+        double maxConfidence = 0;
+        int count005 = 0;
+        int count010 = 0;
+        int count025 = 0;
+
+        for (int i = 0; i < numDetections; i++) {
+          final confidence =
+              (output[0][classId + 4][i] as num).toDouble();
+
+          if (confidence > maxConfidence) {
+            maxConfidence = confidence;
+          }
+
+          if (confidence >= 0.05) count005++;
+          if (confidence >= 0.10) count010++;
+          if (confidence >= 0.25) count025++;
+        }
+
+        print('========== $name DEBUG ==========');
+        print('Maximum $name Confidence: $maxConfidence');
+        print('$name scores >= 0.05: $count005');
+        print('$name scores >= 0.10: $count010');
+        print('$name scores >= 0.25: $count025');
+        print('================================');
+      }
+
+      // ==========================================
+      // MULTIPLE OBJECT DETECTION
+      // ==========================================
+
       final detections = <Map<String, dynamic>>[];
 
+      int paperBoxCount = 0;
+      int invalidPaperBoxCount = 0;
+
       for (int i = 0; i < numDetections; i++) {
-        double bestScore = 0;
+        double bestScore = 0.0;
         int bestClass = -1;
 
+        // Find highest class confidence
         for (int c = 0; c < numClasses; c++) {
-          final score = output[0][c + 4][i];
+          final score = (output[0][c + 4][i] as num)
+              .toDouble();
 
           if (score > bestScore) {
             bestScore = score;
             bestClass = c;
           }
+        }
+
+        // Paper bounding-box debug
+        if (bestClass == paperClassId &&
+            bestScore >= confidenceThreshold) {
+          debugPrint('========== PAPER BOX DEBUG ==========');
+          debugPrint('Index: $i');
+          debugPrint('Class: $bestClass');
+          debugPrint('Confidence: $bestScore');
+          debugPrint('CenterX: ${output[0][0][i]}');
+          debugPrint('CenterY: ${output[0][1][i]}');
+          debugPrint('Width: ${output[0][2][i]}');
+          debugPrint('Height: ${output[0][3][i]}');
+          debugPrint('=====================================');
         }
 
         if (bestScore < confidenceThreshold ||
@@ -163,10 +250,25 @@ class YoloService {
           continue;
         }
 
-        final centerX = output[0][0][i];
-        final centerY = output[0][1][i];
-        final boxWidth = output[0][2][i];
-        final boxHeight = output[0][3][i];
+        final rawCenterX = (output[0][0][i] as num).toDouble();
+final rawCenterY = (output[0][1][i] as num).toDouble();
+final rawBoxWidth = (output[0][2][i] as num).toDouble();
+final rawBoxHeight = (output[0][3][i] as num).toDouble();
+
+// Detect whether coordinates are normalized (0-1)
+// or already in 640x640 pixel coordinates.
+final coordinateScale =
+    (rawCenterX.abs() <= 1.5 &&
+     rawCenterY.abs() <= 1.5 &&
+     rawBoxWidth.abs() <= 1.5 &&
+     rawBoxHeight.abs() <= 1.5)
+        ? inputSize.toDouble()
+        : 1.0;
+
+final centerX = rawCenterX * coordinateScale;
+final centerY = rawCenterY * coordinateScale;
+final boxWidth = rawBoxWidth * coordinateScale;
+final boxHeight = rawBoxHeight * coordinateScale;
 
         final x1 = ((centerX - boxWidth / 2 - padX) / scale)
             .clamp(0.0, originalWidth.toDouble());
@@ -180,7 +282,26 @@ class YoloService {
         final y2 = ((centerY + boxHeight / 2 - padY) / scale)
             .clamp(0.0, originalHeight.toDouble());
 
-        if (x2 <= x1 || y2 <= y1) continue;
+        // Paper coordinate debug
+        if (bestClass == paperClassId &&
+            bestScore >= confidenceThreshold) {
+          debugPrint('Paper coordinates:');
+          debugPrint('x1=$x1, y1=$y1, x2=$x2, y2=$y2');
+          debugPrint('Original: $originalWidth x $originalHeight');
+          debugPrint('Scale: $scale, padX: $padX, padY: $padY');
+        }
+
+        if (x2 <= x1 || y2 <= y1) {
+          if (bestClass == paperClassId) {
+            invalidPaperBoxCount++;
+            debugPrint('INVALID PAPER BOX - Index: $i');
+          }
+          continue;
+        }
+
+        if (bestClass == paperClassId) {
+          paperBoxCount++;
+        }
 
         detections.add({
           'label': _labels[bestClass],
@@ -193,16 +314,38 @@ class YoloService {
         });
       }
 
+      debugPrint('========== BEFORE NMS ==========');
+      debugPrint('Total detections: ${detections.length}');
+      debugPrint('Valid Paper boxes: $paperBoxCount');
+      debugPrint('Invalid Paper boxes: $invalidPaperBoxCount');
+      debugPrint('================================');
+
+      // Non-Maximum Suppression
       final results = _applyNms(detections);
 
+      debugPrint('========== FINAL DETECTIONS ==========');
       debugPrint('Detection count: ${results.length}');
 
+      for (final result in results) {
+        debugPrint(
+          '${result['label']} | '
+          'Confidence: ${result['confidence']}',
+        );
+      }
+
+      debugPrint('======================================');
+
       return results;
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Detection error: $e');
+      debugPrint('$stackTrace');
       return null;
     }
   }
+
+  // ==========================================
+  // NON-MAXIMUM SUPPRESSION
+  // ==========================================
 
   static List<Map<String, dynamic>> _applyNms(
     List<Map<String, dynamic>> detections,
@@ -236,6 +379,10 @@ class YoloService {
     return selected;
   }
 
+  // ==========================================
+  // INTERSECTION OVER UNION
+  // ==========================================
+
   static double _calculateIou(
     Map<String, dynamic> a,
     Map<String, dynamic> b,
@@ -259,7 +406,7 @@ class YoloService {
         (ay1 > by1 ? ay1 : by1);
 
     if (intersectionWidth <= 0 || intersectionHeight <= 0) {
-      return 0;
+      return 0.0;
     }
 
     final intersection =
@@ -273,7 +420,7 @@ class YoloService {
 
     final union = areaA + areaB - intersection;
 
-    return union <= 0 ? 0 : intersection / union;
+    return union <= 0 ? 0.0 : intersection / union;
   }
 
   static void disposeModel() {
