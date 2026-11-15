@@ -12,6 +12,11 @@ class MobileNetService {
     if (_interpreter != null) return;
 
     try {
+      // Web සඳහා TFLite initialize කිරීම
+      if (kIsWeb) {
+        await initializeWeb();
+      }
+
       // 1. Labels load කරගැනීම
       final labelsData = await rootBundle.loadString('assets/model/labels.txt');
       _labels = labelsData
@@ -25,9 +30,7 @@ class MobileNetService {
         'assets/model/mobilenet_paper_model.tflite',
       );
 
-      debugPrint(
-        'MobileNet model loaded successfully. Labels: ${_labels.length}',
-      );
+      debugPrint('MobileNet model loaded successfully. Labels: ${_labels.length}');
     } catch (e) {
       debugPrint('Model loading failed: $e');
       rethrow;
@@ -40,7 +43,6 @@ class MobileNetService {
     try {
       await loadModel();
 
-      // 1. Image එක decode කර 224x224 سائز එකට resize කිරීම
       final originalImage = img.decodeImage(imageBytes);
       if (originalImage == null) throw Exception('Unable to decode image.');
 
@@ -51,23 +53,24 @@ class MobileNetService {
         interpolation: img.Interpolation.linear,
       );
 
-      // 2. Input tensor එක සකස් කිරීම [1, 224, 224, 3] (Normalized 0.0 to 1.0)
       final input = List.generate(
         1,
         (batch) => List.generate(
           inputSize,
-          (y) => List.generate(inputSize, (x) {
-            final pixel = resizedImage.getPixel(x, y);
-            return [
-              pixel.r.toDouble() / 255.0,
-              pixel.g.toDouble() / 255.0,
-              pixel.b.toDouble() / 255.0,
-            ];
-          }),
+          (y) => List.generate(
+            inputSize,
+            (x) {
+              final pixel = resizedImage.getPixel(x, y);
+              return [
+                pixel.r.toDouble() / 255.0,
+                pixel.g.toDouble() / 255.0,
+                pixel.b.toDouble() / 255.0,
+              ];
+            },
+          ),
         ),
       );
 
-      // 3. Output tensor එක සකස් කිරීම [1, numClasses]
       final output = List.generate(
         1,
         (_) => List<double>.filled(_labels.length, 0.0),
@@ -75,21 +78,20 @@ class MobileNetService {
 
       _interpreter!.run(input, output);
 
-      // 4. Results සකස් කිරීම
       final probabilities = output[0];
       final List<Map<String, dynamic>> results = [];
 
       for (int i = 0; i < probabilities.length; i++) {
         if (i < _labels.length) {
-          results.add({'label': _labels[i], 'confidence': probabilities[i]});
+          results.add({
+            'label': _labels[i],
+            'confidence': probabilities[i],
+          });
         }
       }
 
-      // වැඩිම confidence එක ඇති එක උඩට එනសේ sort කිරීම
-      results.sort(
-        (a, b) =>
-            (b['confidence'] as double).compareTo(a['confidence'] as double),
-      );
+      // වැඩිම confidence එක ඇති එක උඩට එනසේ sort කිරීම
+      results.sort((a, b) => (b['confidence'] as double).compareTo(a['confidence'] as double));
 
       return results;
     } catch (e) {

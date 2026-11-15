@@ -16,9 +16,9 @@ class _DetectScreenState extends State<DetectScreen> {
   final ImagePicker _picker = ImagePicker();
 
   Uint8List? _imageBytes;
-  List<dynamic>? _recognitions;
+  List<Map<String, dynamic>>? _recognitions;
   bool _isProcessing = false;
-  String _statusMessage = 'Upload an image to classify objects.';
+  String _statusMessage = 'Upload an image to detect materials.';
 
   @override
   void initState() {
@@ -26,9 +26,9 @@ class _DetectScreenState extends State<DetectScreen> {
     _initializeModel();
   }
 
-  Future<void> _initializeModel() async {
+  void _initializeModel() {
     try {
-      await MobileNetService.loadModel();
+      MobileNetService.loadModel();
       if (kDebugMode) {
         debugPrint('MobileNet model initialization started.');
       }
@@ -36,8 +36,6 @@ class _DetectScreenState extends State<DetectScreen> {
       if (kDebugMode) {
         debugPrint('MobileNet model initialization error: $e');
       }
-      if (!mounted) return;
-
       setState(() {
         _statusMessage = 'Failed to initialize the classification model.';
       });
@@ -71,7 +69,7 @@ class _DetectScreenState extends State<DetectScreen> {
         _imageBytes = imageBytes;
         _recognitions = null;
         _isProcessing = true;
-        _statusMessage = 'Classifying image...';
+        _statusMessage = 'Detecting materials...';
       });
 
       await runModelOnImage(imageBytes);
@@ -93,8 +91,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   Future<void> runModelOnImage(Uint8List imageBytes) async {
     try {
-      // Correct classification method call
-      final List<Map<String, dynamic>> recognitions =
+      final List> recognitions =
           await MobileNetService.classifyImage(imageBytes);
 
       if (!mounted) return;
@@ -108,29 +105,25 @@ class _DetectScreenState extends State<DetectScreen> {
           _isProcessing = false;
           _statusMessage = 'No objects recognized. Try another image.';
         });
-        _showMessage('No objects recognized. Please try another image.');
+        _showMessage('No objects recognized. Please try again.');
         return;
       }
 
+      // -------------------------------------------------------------
+      // මෙතැනදී බැලීමක් නැතුවම ලැයිස්තුවේ උඩින්ම තියෙන (වැඩිම confidence එක ඇති) 
+      // එක ලබා ගනී. (Test කර බැලීම සඳහා)
+      // -------------------------------------------------------------
       final topResult = recognitions.first;
       final String detectedLabel =
           (topResult['label'] ?? '').toString().trim().toLowerCase();
-      final double confidence =
-          (topResult['confidence'] as num?)?.toDouble() ?? 0.0;
-
-      if (confidence < 0.4) {
-        setState(() {
-          _isProcessing = false;
-          _statusMessage = 'Low confidence. Try a clearer image.';
-        });
-        _showMessage('Low confidence detection. Try again.');
-        return;
-      }
+      final double confidence = (topResult['confidence'] as num).toDouble();
 
       setState(() {
+        _isProcessing = false;
         _statusMessage = 'Detected: $detectedLabel (${(confidence * 100).toStringAsFixed(1)}%)';
       });
 
+      // Firestore එකෙන් අදාළ craft එක search කිරීම
       await queryCraftsFromFirestore([detectedLabel]);
 
     } catch (e) {
@@ -164,8 +157,9 @@ class _DetectScreenState extends State<DetectScreen> {
           final Map<String, dynamic> craftData = doc.data();
 
           if (matchedCrafts.containsKey(doc.id)) {
-            final List<String> existingMaterials =
-                List<String>.from(matchedCrafts[doc.id]!['matchedMaterials'] ?? []);
+            final List<String> existingMaterials = List<String>.from(
+              matchedCrafts[doc.id]!['matchedMaterials'] ?? [],
+            );
 
             if (!existingMaterials.contains(materialName)) {
               existingMaterials.add(materialName);
@@ -183,22 +177,22 @@ class _DetectScreenState extends State<DetectScreen> {
 
       if (!mounted) return;
 
-      final List<Map<String, dynamic>> craftsList =
-          matchedCrafts.values.toList();
+      final List<Map<String, dynamic>> craftsList = matchedCrafts.values
+          .toList();
 
       if (craftsList.isNotEmpty) {
         setState(() {
           _isProcessing = false;
-          _statusMessage = '${craftsList.length} matching crafts found.';
+          _statusMessage = '${craftsList.length} matching crafts found!';
         });
 
-        final String detectedMaterial = materialNames.join(', ');
+        final String detectedMaterialStr = materialNames.join(', ');
 
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => MatchedCraftsScreen(
-              detectedMaterial: detectedMaterial,
+              detectedMaterial: detectedMaterialStr,
               crafts: craftsList,
             ),
           ),
@@ -206,7 +200,7 @@ class _DetectScreenState extends State<DetectScreen> {
       } else {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'No matching crafts found.';
+          _statusMessage = 'No matching crafts found for these items.';
         });
 
         _showMessage('No crafts found for the detected materials.');
@@ -233,10 +227,7 @@ class _DetectScreenState extends State<DetectScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 3),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
       );
   }
 
@@ -244,7 +235,7 @@ class _DetectScreenState extends State<DetectScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Craft Classification'),
+        title: const Text('Scan & Find Crafts'),
         backgroundColor: const Color(0xFF2ECC71),
         foregroundColor: Colors.white,
       ),
@@ -269,10 +260,7 @@ class _DetectScreenState extends State<DetectScreen> {
                   )
                 : ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(
-                      _imageBytes!,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.memory(_imageBytes!, fit: BoxFit.contain),
                   ),
           ),
           const SizedBox(height: 20),
@@ -300,7 +288,7 @@ class _DetectScreenState extends State<DetectScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 10),
-                  Text('Processing image...'),
+                  Text('Analyzing image & searching crafts...'),
                 ],
               ),
             ),
@@ -317,37 +305,47 @@ class _DetectScreenState extends State<DetectScreen> {
           const Padding(
             padding: EdgeInsets.all(10),
             child: Text(
-              'Classification Results',
+              'Detection Results',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
           Expanded(
             child: _recognitions == null
-                ? const Center(child: Text('Upload an image to classify'))
+                ? const Center(child: Text('Upload or capture a photo to scan'))
                 : _recognitions!.isEmpty
-                    ? const Center(child: Text('No objects recognized.'))
-                    : ListView.builder(
-                        itemCount: _recognitions!.length,
-                        itemBuilder: (context, index) {
-                          final result = _recognitions![index];
-                          final String label = (result['label'] ?? 'Unknown').toString();
-                          final double confidence = (result['confidence'] is num)
-                              ? (result['confidence'] as num).toDouble()
-                              : 0.0;
+                ? const Center(child: Text('No objects recognized.'))
+                : ListView.builder(
+                    itemCount: _recognitions!.length,
+                    itemBuilder: (context, index) {
+                      final result = _recognitions![index];
+                      final String label = (result['label'] ?? 'Unknown')
+                          .toString();
+                      final double confidence = (result['confidence'] is num)
+                          ? (result['confidence'] as num).toDouble()
+                          : 0.0;
 
-                          return ListTile(
-                            leading: const Icon(
-                              Icons.check_circle,
-                              color: Color(0xFF2ECC71),
-                            ),
-                            title: Text(label),
-                            trailing: Text(
-                              '${(confidence * 100).toStringAsFixed(1)}%',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          );
-                        },
-                      ),
+                      return ListTile(
+                        leading: Icon(
+                          confidence >= 0.20
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: confidence >= 0.20
+                              ? const Color(0xFF2ECC71)
+                              : Colors.grey,
+                        ),
+                        title: Text(label),
+                        trailing: Text(
+                          '${(confidence * 100).toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: confidence >= 0.20
+                                ? Colors.black87
+                                : Colors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
