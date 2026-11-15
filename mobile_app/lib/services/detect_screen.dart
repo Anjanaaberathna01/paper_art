@@ -91,7 +91,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   Future<void> runModelOnImage(Uint8List imageBytes) async {
     try {
-      final List> recognitions =
+      final List<Map<String, dynamic>> recognitions =
           await MobileNetService.classifyImage(imageBytes);
 
       if (!mounted) return;
@@ -110,22 +110,24 @@ class _DetectScreenState extends State<DetectScreen> {
       }
 
       // -------------------------------------------------------------
-      // මෙතැනදී බැලීමක් නැතුවම ලැයිස්තුවේ උඩින්ම තියෙන (වැඩිම confidence එක ඇති) 
+      // මෙතැනදී බැලීමක් නැතුවම ලැයිස්තුවේ උඩින්ම තියෙන (වැඩිම confidence එක ඇති)
       // එක ලබා ගනී. (Test කර බැලීම සඳහා)
       // -------------------------------------------------------------
       final topResult = recognitions.first;
-      final String detectedLabel =
-          (topResult['label'] ?? '').toString().trim().toLowerCase();
+      final String detectedLabel = (topResult['label'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
       final double confidence = (topResult['confidence'] as num).toDouble();
 
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Detected: $detectedLabel (${(confidence * 100).toStringAsFixed(1)}%)';
+        _statusMessage =
+            'Detected: $detectedLabel (${(confidence * 100).toStringAsFixed(1)}%)';
       });
 
       // Firestore එකෙන් අදාළ craft එක search කිරීම
       await queryCraftsFromFirestore([detectedLabel]);
-
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Classification error: $e');
