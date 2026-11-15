@@ -64,7 +64,8 @@ class HomeScreen extends StatelessWidget {
             );
           }
 
-final Map<String, List<Map<String, dynamic>>> categorized = {};          for (var doc in snapshot.data!.docs) {
+final Map<String, List<Map<String, dynamic>>> categorized = {};          
+          for (var doc in snapshot.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final category = data['category'] ?? 'Other Crafts';
             categorized.putIfAbsent(category, () => []).add(data);
