@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_app/services/mobilenet_service.dart';
-import 'package:mobile_app/screens/matched_crafts_screen.dart';
+import 'package:mobile_app/screens/detail_screen.dart';
 
 class DetectScreen extends StatefulWidget {
   const DetectScreen({super.key});
@@ -16,9 +16,14 @@ class _DetectScreenState extends State<DetectScreen> {
   final ImagePicker _picker = ImagePicker();
 
   Uint8List? _imageBytes;
-  List<Map<String, dynamic>>? _recognitions;
   bool _isProcessing = false;
-  String _statusMessage = 'Upload an image to detect materials.';
+  String _statusMessage = 'Upload or capture an image to find matching crafts.';
+
+  // හඳුනාගත් ද්‍රව්‍ය සහ ඒවායේ ප්‍රතිශත (percentages) තබා ගැනීමට
+  List<Map<String, dynamic>> _detectedItems = [];
+
+  // හඳුනාගත් ද්‍රව්‍යවලට අදාළව Firestore එකෙන් ගෙන එන Hand Crafts ලැයිස්තුව
+  List<Map<String, dynamic>> _suggestedCrafts = [];
 
   @override
   void initState() {
@@ -67,9 +72,10 @@ class _DetectScreenState extends State<DetectScreen> {
 
       setState(() {
         _imageBytes = imageBytes;
-        _recognitions = null;
+        _detectedItems = [];
+        _suggestedCrafts = [];
         _isProcessing = true;
-        _statusMessage = 'Detecting materials...';
+        _statusMessage = 'Analyzing image...';
       });
 
       await runModelOnImage(imageBytes);
@@ -96,10 +102,6 @@ class _DetectScreenState extends State<DetectScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        _recognitions = recognitions;
-      });
-
       if (recognitions.isEmpty) {
         setState(() {
           _isProcessing = false;
@@ -110,24 +112,44 @@ class _DetectScreenState extends State<DetectScreen> {
       }
 
       // -------------------------------------------------------------
-      // මෙතැනදී බැලීමක් නැතුවම ලැයිස්තුවේ උඩින්ම තියෙන (වැඩිම confidence එක ඇති)
-      // එක ලබා ගනී. (Test කර බැලීම සඳහා)
+      // 5% (0.05) හෝ ඊට වැඩි ඕනෑම ප්‍රතිශතයක් හඳුනාගැනීම (ඉතා සංවේදීයි)
       // -------------------------------------------------------------
-      final topResult = recognitions.first;
-      final String detectedLabel = (topResult['label'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final double confidence = (topResult['confidence'] as num).toDouble();
+      final List<Map<String, dynamic>> validDetections = [];
+      final List<String> materialNames = [];
+
+      for (final result in recognitions) {
+        final double confidence = (result['confidence'] as num).toDouble();
+        final String label = (result['label'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        if (confidence >= 0.05 && label.isNotEmpty) {
+          validDetections.add({'label': label, 'confidence': confidence});
+          materialNames.add(label);
+        }
+      }
+
+      // කිසිවක් 5% ඉක්මවා නැතත්, ලැයිස්තුවේ උඩින්ම ඇති හොඳම ප්‍රතිඵලය අනිවාර්යයෙන්ම ගනියි
+      if (validDetections.isEmpty && recognitions.isNotEmpty) {
+        final top = recognitions.first;
+        final String label = (top['label'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final double conf = (top['confidence'] as num).toDouble();
+        validDetections.add({'label': label, 'confidence': conf});
+        materialNames.add(label);
+      }
 
       setState(() {
-        _isProcessing = false;
-        _statusMessage =
-            'Detected: $detectedLabel (${(confidence * 100).toStringAsFixed(1)}%)';
+        _detectedItems = validDetections;
       });
 
-      // Firestore එකෙන් අදාළ craft එක search කිරීම
-      await queryCraftsFromFirestore([detectedLabel]);
+      // -------------------------------------------------------------
+      // Firestore එකෙන් මෙම ද්‍රව්‍යවලට අදාළ Hand Crafts සෙවීම
+      // -------------------------------------------------------------
+      await queryCraftsFromFirestore(materialNames);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Classification error: $e');
@@ -137,76 +159,51 @@ class _DetectScreenState extends State<DetectScreen> {
 
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Classification failed.';
+        _statusMessage = 'Detection failed.';
       });
 
-      _showMessage('Classification failed. Please try again.');
+      _showMessage('Detection failed. Please try again.');
     }
   }
 
   Future<void> queryCraftsFromFirestore(List<String> materialNames) async {
     try {
-      final Map<String, Map<String, dynamic>> matchedCrafts = {};
+      if (materialNames.isEmpty) {
+        setState(() {
+          _isProcessing = false;
+          _suggestedCrafts = [];
+          _statusMessage = 'No valid materials detected.';
+        });
+        return;
+      }
 
-      for (final materialName in materialNames) {
-        final QuerySnapshot<Map<String, dynamic>> snapshot =
-            await FirebaseFirestore.instance
-                .collection('craft')
-                .where('materials', arrayContains: materialName)
-                .get();
+      // arrayContainsAny මඟින් හඳුනාගත් ඕනෑම ද්‍රව්‍යයක් අඩංගු crafts එකවර ලබා ගනී
+      final QuerySnapshot<Map<String, dynamic>> snapshot =
+          await FirebaseFirestore.instance
+              .collection('craft')
+              .where('materials', arrayContainsAny: materialNames)
+              .get();
 
-        for (final doc in snapshot.docs) {
-          final Map<String, dynamic> craftData = doc.data();
+      final List<Map<String, dynamic>> craftsList = [];
 
-          if (matchedCrafts.containsKey(doc.id)) {
-            final List<String> existingMaterials = List<String>.from(
-              matchedCrafts[doc.id]!['matchedMaterials'] ?? [],
-            );
+      for (final doc in snapshot.docs) {
+        final Map<String, dynamic> craftData = doc.data();
+        craftData['id'] = doc.id;
 
-            if (!existingMaterials.contains(materialName)) {
-              existingMaterials.add(materialName);
-            }
-            matchedCrafts[doc.id]!['matchedMaterials'] = existingMaterials;
-          } else {
-            matchedCrafts[doc.id] = {
-              ...craftData,
-              'id': doc.id,
-              'matchedMaterials': [materialName],
-            };
-          }
+        if (!craftsList.any((c) => c['id'] == doc.id)) {
+          craftsList.add(craftData);
         }
       }
 
       if (!mounted) return;
 
-      final List<Map<String, dynamic>> craftsList = matchedCrafts.values
-          .toList();
-
-      if (craftsList.isNotEmpty) {
-        setState(() {
-          _isProcessing = false;
-          _statusMessage = '${craftsList.length} matching crafts found!';
-        });
-
-        final String detectedMaterialStr = materialNames.join(', ');
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MatchedCraftsScreen(
-              detectedMaterial: detectedMaterialStr,
-              crafts: craftsList,
-            ),
-          ),
-        );
-      } else {
-        setState(() {
-          _isProcessing = false;
-          _statusMessage = 'No matching crafts found for these items.';
-        });
-
-        _showMessage('No crafts found for the detected materials.');
-      }
+      setState(() {
+        _isProcessing = false;
+        _suggestedCrafts = craftsList;
+        _statusMessage = craftsList.isNotEmpty
+            ? '${craftsList.length} matching crafts found!'
+            : 'No crafts found in database for detected items.';
+      });
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Firestore query error: $e');
@@ -237,15 +234,16 @@ class _DetectScreenState extends State<DetectScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan & Find Crafts'),
+        title: const Text('Scan & Suggest Crafts'),
         backgroundColor: const Color(0xFF2ECC71),
         foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          // Uploaded Image Preview
           Container(
-            height: 220,
+            height: 180,
             width: double.infinity,
             margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
@@ -257,7 +255,7 @@ class _DetectScreenState extends State<DetectScreen> {
                 ? const Center(
                     child: Text(
                       'No image selected.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      style: TextStyle(fontSize: 15, color: Colors.grey),
                     ),
                   )
                 : ClipRRect(
@@ -265,35 +263,7 @@ class _DetectScreenState extends State<DetectScreen> {
                     child: Image.memory(_imageBytes!, fit: BoxFit.contain),
                   ),
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _isProcessing ? null : pickImageFromCamera,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Camera'),
-              ),
-              const SizedBox(width: 15),
-              ElevatedButton.icon(
-                onPressed: _isProcessing ? null : pickImageFromGallery,
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Gallery'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (_isProcessing)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 10),
-                  Text('Analyzing image & searching crafts...'),
-                ],
-              ),
-            ),
+          const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -302,47 +272,184 @@ class _DetectScreenState extends State<DetectScreen> {
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ),
+
+          // Camera / Gallery Action Buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _isProcessing ? null : pickImageFromCamera,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Camera'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2ECC71),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 15),
+              ElevatedButton.icon(
+                onPressed: _isProcessing ? null : pickImageFromGallery,
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Gallery'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF26C6DA),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+
           const SizedBox(height: 10),
-          const Divider(),
-          const Padding(
-            padding: EdgeInsets.all(10),
-            child: Text(
-              'Detection Results',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          if (_isProcessing)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: LinearProgressIndicator(color: Color(0xFF2ECC71)),
+            ),
+
+          // Status & Detected Objects Percentage List
+          if (_detectedItems.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Detected Objects:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _detectedItems.length,
+                itemBuilder: (context, index) {
+                  final item = _detectedItems[index];
+                  final label = item['label'].toString().toUpperCase();
+                  final conf = (item['confidence'] as double) * 100;
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF2ECC71)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$label (${conf.toStringAsFixed(1)}%)',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2E7D32),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          const Divider(height: 20),
+
+          // Suggested Hand Crafts Section header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Suggested Hand Crafts',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${_suggestedCrafts.length} found',
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: _recognitions == null
-                ? const Center(child: Text('Upload or capture a photo to scan'))
-                : _recognitions!.isEmpty
-                ? const Center(child: Text('No objects recognized.'))
-                : ListView.builder(
-                    itemCount: _recognitions!.length,
-                    itemBuilder: (context, index) {
-                      final result = _recognitions![index];
-                      final String label = (result['label'] ?? 'Unknown')
-                          .toString();
-                      final double confidence = (result['confidence'] is num)
-                          ? (result['confidence'] as num).toDouble()
-                          : 0.0;
+          const SizedBox(height: 8),
 
-                      return ListTile(
-                        leading: Icon(
-                          confidence >= 0.20
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          color: confidence >= 0.20
-                              ? const Color(0xFF2ECC71)
-                              : Colors.grey,
+          // Suggested Crafts Grid View
+          Expanded(
+            child: _suggestedCrafts.isEmpty
+                ? Center(
+                    child: Text(
+                      _isProcessing
+                          ? 'Searching crafts...'
+                          : 'No crafts available for this item yet.',
+                      style: const TextStyle(fontSize: 15, color: Colors.grey),
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _suggestedCrafts.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.75,
                         ),
-                        title: Text(label),
-                        trailing: Text(
-                          '${(confidence * 100).toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: confidence >= 0.20
-                                ? Colors.black87
-                                : Colors.grey,
+                    itemBuilder: (context, index) {
+                      final craft = _suggestedCrafts[index];
+                      final title = craft['title'] ?? 'Craft';
+                      final imagePath =
+                          craft['imagePath'] ?? 'assets/images/placeholder.jpg';
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DetailScreen(craft: craft),
+                            ),
+                          );
+                        },
+                        child: Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(20),
+                                  ),
+                                  child: Image.asset(
+                                    imagePath,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    errorBuilder: (_, __, ___) => const Center(
+                                      child: Icon(Icons.broken_image, size: 40),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(10.0),
+                                child: Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
