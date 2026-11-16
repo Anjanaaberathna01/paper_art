@@ -177,7 +177,6 @@ class _DetectScreenState extends State<DetectScreen> {
         return;
       }
 
-      // arrayContainsAny මඟින් හඳුනාගත් ඕනෑම ද්‍රව්‍යයක් අඩංගු crafts එකවර ලබා ගනී
       final QuerySnapshot<Map<String, dynamic>> snapshot =
           await FirebaseFirestore.instance
               .collection('craft')
@@ -431,7 +430,7 @@ class _DetectScreenState extends State<DetectScreen> {
                                     imagePath,
                                     fit: BoxFit.cover,
                                     width: double.infinity,
-                                    errorBuilder: (_, __, ___) => const Center(
+                                    errorBuilder: (_, _, ___) => const Center(
                                       child: Icon(Icons.broken_image, size: 40),
                                     ),
                                   ),
